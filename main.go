@@ -1,173 +1,92 @@
 package main
 
-//import packages
 import (
-	"fmt"		//GO'92s base package 
-	"io/ioutil"	//reading/writing data from input/output streams 
-	"net/http"	//for sending HTTP requests
-	"net/url"	//for URL formatting
-	"regexp"	//regular expressions
-	"runtime"	//GO runtime (used to set the number of threads to be used)
-	"strings"	//string manipulation and testing
+	"context"
+	"log"
+	"regexp"
+	"runtime"
+	"strings"
+	"sync"
+
+	"github.com/chromedp/chromedp"
 )
 
-//how many threads to use within the application
+// how many threads to use within the application
 const NCPU = 8
 
-//URL filter function definition
-type filterFunc func(string, Crawler) bool
-
-//Our crawler structure definition
+// Our crawler structure definition
 type Crawler struct {
-	//the base URL of the website being crawled
-	host string
-	//a channel on which the crawler will receive new (unfiltered) URLs to crawl
-	//the crawler will pass everything received from this channel
-	//through the chain of filters we have
-	//and only allowed URLs will be passed to the filteredUrls channel
 	urls chan string
-	//a channel on which the crawler will receive filtered URLs.
-	filteredUrls chan string //a channel
-	//a slice that contains the filters we want to apply on the URLs.
-	filters []filterFunc
-	//a regular expression pointer to the RegExp that will be used to extract the
-	//URLs from each request.
-	re *regexp.Regexp
-	//an integer to track how many URLs have been crawled
-	count int
 }
 
-//starts the crawler
-//the method starts two GO functions
-//the first one waits for new URLs as they
-//get extracted.
-//the second waits for filtered URLs as they
-//pass through all the registered filters
-func (crawler *Crawler) start() {
-	//wait for new URLs to be extracted and passed to the URLs channel.
+func (crawler *Crawler) start(wg *sync.WaitGroup) {
+	// wait for new URLs to be extracted and passed to the URLs channel.
+	wg.Add(1)
 	go func() {
-		for n := range crawler.urls {
-			//filter the url
-			go crawler.filter(n)
+		for url := range crawler.urls {
+			wg.Add(1)
+			go crawler.googleSearch(url, q, wg)
 		}
-	}()
-
-	//wait for filtered URLs to arrive through the filteredUrls channel
-	go func() {
-		for s := range crawler.filteredUrls {
-			//print the newly received filtered URL
-			fmt.Println(s)
-			//increment the crawl count
-			crawler.count++
-			//print crawl count
-			fmt.Println(crawler.count)
-			//start a new GO routine to crawl the filtered URL
-			go crawler.crawl(s)
-		}
+		wg.Done()
 	}()
 }
 
-//given a URL, the method will send an HTTP GET request
-//extract the response body
-//extract the URLs from the body
-func (crawler *Crawler) crawl(url string) {
-	//send http request
-	resp, err := http.Get(url)
+func (crawler *Crawler) getContents(url string) {
+
+}
+
+// given a URL, this method retrieves the required element from the web page.
+func (crawler *Crawler) googleSearch(url string, wg *sync.WaitGroup) {
+
+	defer wg.Done()
+
+	// create context
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
+
+	sel := "//input[@name='q']"
+	q := "reliance stock price"
+
+	// run task list
+	var res string
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(url),
+		chromedp.WaitVisible(sel),
+		chromedp.SendKeys(sel, q),
+		chromedp.Click(`input[name="btnK"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`//span[@jsname="vWLAgc"]`),
+		chromedp.Text(`//span[@jsname="vWLAgc"]`, &res),
+	)
+
 	if err != nil {
-		fmt.Println("An error has occured")
-		fmt.Println(err)
-	} else {
-		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Read error has occured")
-		} else {
-			strBody := string(body)
-			fmt.Println(strBody)
-			crawler.extractUrls(url, strBody)
-		}
-
+		log.Fatal(err)
 	}
+
+	re := regexp.MustCompile("\\n")
+	res = re.ReplaceAllString(res, " ")
+	log.Println(strings.ToUpper(q) + ": " + res)
 }
 
-//adds a new URL filter to the crawler
-func (crawler *Crawler) addFilter(filter filterFunc) *Crawler {
-	crawler.filters = append(crawler.filters, filter)
-	return crawler
-}
-
-//stops the crawler by closing both the URLs channel
-//and the filtered URLs channel
+// stops the crawler by closing both the URLs channel
 func (crawler *Crawler) stop() {
 	close(crawler.urls)
-	close(crawler.filteredUrls)
-}
-
-//given a URL, the method will apply all the filters
-//on that URL, if and only if, it passes through all
-//the filters, it will then be passed to the filteredUrls channel
-func (crawler *Crawler) filter(url string) {
-	temp := false
-	for _, fn := range crawler.filters {
-		temp = fn(url, *crawler)
-		if temp != true {
-			return
-		}
-	}
-	crawler.filteredUrls <- url
-}
-
-//given the crawled URL, and its body, the method
-//will extract the URLs from the body
-//and generate absolute URLs to be crawled by the
-//crawler
-//the extracted URLs will be passed to the URLs channel
-func (crawler *Crawler) extractUrls(Url, body string) {
-	newUrls := crawler.re.FindAllStringSubmatch(body, -1)
-	u := ""
-	baseUrl, _ := url.Parse(Url)
-	if newUrls != nil {
-		for _, z := range newUrls {
-			u = z[1]
-			ur, err := url.Parse(z[1])
-			if err == nil {
-				if ur.IsAbs() == true {
-					crawler.urls <- u
-				} else if ur.IsAbs() == false {
-					crawler.urls <- baseUrl.ResolveReference(ur).String()
-				} else if strings.HasPrefix(u, "//") {
-					crawler.urls <- "http:" + u
-				} else if strings.HasPrefix(u, "/") {
-					crawler.urls <- crawler.host + u
-				} else {
-					crawler.urls <- Url + u
-				}
-			}
-		}
-	}
 }
 
 func main() {
-	//set how many processes (threads to use)
+	// set how many processes (threads to use)
 	runtime.GOMAXPROCS(NCPU)
 
-	//create a new instance of the crawler structure
+	var wg sync.WaitGroup
+	// create a new instance of the crawler structure
 	c := &Crawler{
-		"http://www.groww.in/stocks/reliance-industries-ltd",
 		make(chan string),
-		make(chan string),
-		make([]filterFunc, 0),
-		regexp.MustCompile("(?s)<a[ t]+.*?href=\"(http.*?)\".*?>.*?</a>"),
-		0,
 	}
-	//add our only filter which makes sure that we are only
-	//crawling internal URLs.
-	c.addFilter(func(Url string, crawler Crawler) bool {
-		return strings.Contains(Url, crawler.host)
-	}).start()
+	
+	c.start(&wg)
 
-	c.urls <- c.host
+	c.urls <- "https://www.google.com"
+	c.stop()
 
-	var input string
-	fmt.Scanln(&input)
+	wg.Wait()
+
 }
