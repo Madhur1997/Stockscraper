@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -10,17 +11,20 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/urfave/cli/v2"
 )
 
 // how many threads to use within the application
 const NCPU = 8
+
+var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
+	"vodafone idea", "TCS", "divis labs",}
 
 // Our crawler structure definition
 type Crawler struct {
 }
 
 func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
-
 	log.Println("Starting Web Crawler")
 
 	url := "https://www.google.com"
@@ -38,7 +42,6 @@ func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
 
 // given a URL, this method retrieves the required element from the web page.
 func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
-
 	log.Printf("Scrapping stock price for: %s\n", strings.Title(q))
 
 	defer wg.Done()
@@ -81,12 +84,20 @@ func main() {
 	// set how many processes (threads to use)
 	runtime.GOMAXPROCS(NCPU)
 
+	app := cli.NewApp()
+	app.Name = "webscraper"
+	app.Usage = "Scrap stock prices from Google"
+
 	var wg sync.WaitGroup
 	// create a new instance of the crawler structure
 	c := &Crawler{
 	}
 	
-	c.start(&wg, "reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "Bank Nifty")
+	c.start(&wg)
+
+	if err := app.Run(os.Args); err != nil {
+		log.Fatalf("Received error while trying to run webscraper: %v", err)
+	}
 
 	wg.Wait()
 }
