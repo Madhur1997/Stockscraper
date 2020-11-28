@@ -25,7 +25,7 @@ type Crawler struct {
 }
 
 func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
-	log.Println("Starting Web Crawler")
+	log.Println("Starting StockScraper")
 
 	url := "https://www.google.com"
 
@@ -85,7 +85,7 @@ func main() {
 	runtime.GOMAXPROCS(NCPU)
 
 	app := cli.NewApp()
-	app.Name = "webscraper"
+	app.Name = "StockScrapper"
 	app.Usage = "Scrap stock prices from Google"
 
 	var wg sync.WaitGroup
@@ -96,7 +96,7 @@ func main() {
 	c.start(&wg)
 
 	if err := app.Run(os.Args); err != nil {
-		log.Fatalf("Received error while trying to run webscraper: %v", err)
+		log.Fatalf("Received error while trying to run stockscraper: %v", err)
 	}
 
 	wg.Wait()

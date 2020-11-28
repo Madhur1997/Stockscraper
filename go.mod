@@ -1,4 +1,4 @@
-module github.com/Madhur1997/webscraper
+module github.com/Madhur1997/stockscraper
 
 go 1.13
 
