@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
@@ -16,60 +17,64 @@ const NCPU = 8
 
 // Our crawler structure definition
 type Crawler struct {
-	urls chan string
 }
 
-func (crawler *Crawler) start(wg *sync.WaitGroup) {
-	// wait for new URLs to be extracted and passed to the URLs channel.
+func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
+
+	log.Println("Starting Web Crawler")
+
+	url := "https://www.google.com"
+
 	wg.Add(1)
 	go func() {
-		for url := range crawler.urls {
+		defer wg.Done()
+		for _, q := range queries {
 			wg.Add(1)
-			go crawler.googleSearch(url, q, wg)
+
+			go crawler.scrapStockPrice(url, q, wg)
 		}
-		wg.Done()
 	}()
 }
 
-func (crawler *Crawler) getContents(url string) {
-
-}
-
 // given a URL, this method retrieves the required element from the web page.
-func (crawler *Crawler) googleSearch(url string, wg *sync.WaitGroup) {
+func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
+
+	log.Printf("Scrapping stock price for: %s\n", strings.Title(q))
 
 	defer wg.Done()
 
+	inQ := q + " stock price"
+	inTextSel := `//input[@name='q']`
+	btnSel := `input[name="btnK"]`
+	outTextSel := `//span[@jsname="vWLAgc"]`
+
 	// create context
 	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
 
-	sel := "//input[@name='q']"
-	q := "reliance stock price"
+	// Wait for timeout.
+	timeoutContext, cancel := context.WithTimeout(ctx, 10 * time.Second)
+	defer cancel()
 
 	// run task list
 	var res string
-	err := chromedp.Run(ctx,
+	err := chromedp.Run(
+		timeoutContext,
 		chromedp.Navigate(url),
-		chromedp.WaitVisible(sel),
-		chromedp.SendKeys(sel, q),
-		chromedp.Click(`input[name="btnK"]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`//span[@jsname="vWLAgc"]`),
-		chromedp.Text(`//span[@jsname="vWLAgc"]`, &res),
+		chromedp.WaitVisible(inTextSel),
+		chromedp.SendKeys(inTextSel, inQ),
+		chromedp.Click(btnSel, chromedp.ByQuery),
+		chromedp.WaitVisible(outTextSel),
+		chromedp.Text(outTextSel, &res),
 	)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
+		return
 	}
 
 	re := regexp.MustCompile("\\n")
 	res = re.ReplaceAllString(res, " ")
 	log.Println(strings.ToUpper(q) + ": " + res)
-}
-
-// stops the crawler by closing both the URLs channel
-func (crawler *Crawler) stop() {
-	close(crawler.urls)
 }
 
 func main() {
@@ -79,14 +84,9 @@ func main() {
 	var wg sync.WaitGroup
 	// create a new instance of the crawler structure
 	c := &Crawler{
-		make(chan string),
 	}
 	
-	c.start(&wg)
-
-	c.urls <- "https://www.google.com"
-	c.stop()
+	c.start(&wg, "reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "Bank Nifty")
 
 	wg.Wait()
-
 }
