@@ -1,3 +1,3 @@
 build:
-	go build -o ./webscraper -v ./
+	go install -v ./
 .PHONY: build
