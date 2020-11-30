@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"regexp"
@@ -25,7 +26,7 @@ type Crawler struct {
 }
 
 func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
-	log.Println("Starting StockScraper")
+	log.Println("Starting Web Crawler")
 
 	url := "https://www.google.com"
 
@@ -55,7 +56,7 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 
 	// Wait for timeout.
-	timeoutContext, cancel := context.WithTimeout(ctx, 10 * time.Second)
+	timeoutContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
 	defer cancel()
 
 	// run task list
@@ -85,19 +86,40 @@ func main() {
 	runtime.GOMAXPROCS(NCPU)
 
 	app := cli.NewApp()
-	app.Name = "StockScrapper"
-	app.Usage = "Scrap stock prices from Google"
-
-	var wg sync.WaitGroup
-	// create a new instance of the crawler structure
-	c := &Crawler{
+	app.Name = "stockscraper"
+	app.Usage = "Scrap stock prices from Google."
+	app.Flags = []cli.Flag{
+		&cli.StringSliceFlag{
+			Name: "name",
+			Aliases: []string{"n"},
+			Value: cli.NewStringSlice("reliance"),
+			Usage: "Name of stock(s).",
+		},
+		&cli.BoolFlag{
+			Name: "std, s",
+			Value: false,
+			Usage: "Use Personal Stock List for scraping Google.",
+		},
 	}
+	app.Action = func(c *cli.Context) error {
+		var wg sync.WaitGroup
+		// create a new instance of the crawler structure
+		crawler := &Crawler{
+		}
+
+		if c.Bool("std") {
+			crawler.start(&wg, personalList...)
+		} else {
+			crawler.start(&wg, c.StringSlice("name")...)
+		}
 	
-	c.start(&wg)
+		wg.Wait()
+		return nil
+	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("Received error while trying to run stockscraper: %v", err)
 	}
 
-	wg.Wait()
+	fmt.Println()
 }
