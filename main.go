@@ -23,6 +23,7 @@ var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kes
 
 // Our crawler structure definition
 type Crawler struct {
+	Ctx context.Context
 }
 
 func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
@@ -52,12 +53,8 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 	btnSel := `input[name="btnK"]`
 	outTextSel := `//span[@jsname="vWLAgc"]`
 
-	// create context
-	ctx, cancel := chromedp.NewContext(context.Background())
-
 	// Wait for timeout.
-	timeoutContext, cancel := context.WithTimeout(ctx, 30 * time.Second)
-	defer cancel()
+	timeoutContext, _ := context.WithTimeout(crawler.Ctx, 30 * time.Second)
 
 	// run task list
 	var res string
@@ -96,15 +93,18 @@ func main() {
 			Usage: "Name of stock(s).",
 		},
 		&cli.BoolFlag{
-			Name: "std, s",
+			Name: "std",
 			Value: false,
 			Usage: "Use Personal Stock List for scraping Google.",
 		},
 	}
 	app.Action = func(c *cli.Context) error {
 		var wg sync.WaitGroup
+		// create context
+		ctx, _ := chromedp.NewContext(context.Background())
 		// create a new instance of the crawler structure
 		crawler := &Crawler{
+			Ctx: ctx,
 		}
 
 		if c.Bool("std") {
