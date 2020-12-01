@@ -16,14 +16,13 @@ import (
 )
 
 // how many threads to use within the application
-const NCPU = 8
+const NCPU = 1
 
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
 	"vodafone idea", "TCS", "divis labs",}
 
 // Our crawler structure definition
 type Crawler struct {
-	Ctx context.Context
 }
 
 func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
@@ -53,8 +52,11 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 	btnSel := `input[name="btnK"]`
 	outTextSel := `//span[@jsname="vWLAgc"]`
 
+	// create context
+	ctx, _ := chromedp.NewContext(context.Background())
+
 	// Wait for timeout.
-	timeoutContext, _ := context.WithTimeout(crawler.Ctx, 30 * time.Second)
+	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
 
 	// run task list
 	var res string
@@ -100,11 +102,8 @@ func main() {
 	}
 	app.Action = func(c *cli.Context) error {
 		var wg sync.WaitGroup
-		// create context
-		ctx, _ := chromedp.NewContext(context.Background())
 		// create a new instance of the crawler structure
 		crawler := &Crawler{
-			Ctx: ctx,
 		}
 
 		if c.Bool("std") {
