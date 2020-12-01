@@ -53,7 +53,7 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 	outTextSel := `//span[@jsname="vWLAgc"]`
 
 	// create context
-	ctx, _ := chromedp.NewContext(context.Background())
+	ctx, cancel := chromedp.NewContext(context.Background())
 
 	// Wait for timeout.
 	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
@@ -72,12 +72,17 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 
 	if err != nil {
 		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
+		cancel()
+		chromedp.FromContext(ctx).Allocator.Wait()
 		return
 	}
 
 	re := regexp.MustCompile("\\n")
 	res = re.ReplaceAllString(res, " ")
 	log.Println(strings.ToUpper(q) + ": " + res)
+
+	cancel()
+	chromedp.FromContext(ctx).Allocator.Wait()
 }
 
 func main() {
