@@ -25,28 +25,9 @@ var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kes
 type Crawler struct {
 }
 
-func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
-	log.Println("Starting Web Crawler")
+func fetchPriceFromGoogle(q string) (string) {
 
 	url := "https://www.google.com"
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, q := range queries {
-			wg.Add(1)
-
-			go crawler.scrapStockPrice(url, q, wg)
-		}
-	}()
-}
-
-// given a URL, this method retrieves the required element from the web page.
-func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
-	log.Printf("Scrapping stock price for: %s\n", strings.Title(q))
-
-	defer wg.Done()
-
 	inQ := q + " stock price"
 	inTextSel := `//input[@name='q']`
 	btnSel := `input[name="btnK"]`
@@ -54,7 +35,7 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 
 	// create context
 	ctx, cancel := chromedp.NewContext(context.Background())
-
+	defer cancel()
 	// Wait for timeout.
 	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
 
@@ -72,17 +53,54 @@ func (crawler *Crawler) scrapStockPrice(url, q string, wg *sync.WaitGroup) {
 
 	if err != nil {
 		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
-		cancel()
 		chromedp.FromContext(ctx).Allocator.Wait()
-		return
+		return ""
 	}
 
 	re := regexp.MustCompile("\\n")
-	res = re.ReplaceAllString(res, " ")
-	log.Println(strings.ToUpper(q) + ": " + res)
+	return re.ReplaceAllString(res, " ")
+}
 
-	cancel()
-	chromedp.FromContext(ctx).Allocator.Wait()
+func (crawler *Crawler) scrapStockPrice(wg *sync.WaitGroup, q string) {
+	log.Printf("Scrapping stock price for: %s\n", strings.Title(q))
+
+	defer wg.Done()
+	res := fetchPriceFromGoogle(q)
+	if res != "" {
+		log.Println(strings.ToUpper(q) + ": " + res)
+	}
+}
+
+func (crawler *Crawler) monitor(wg *sync.WaitGroup, q string) {
+	log.Println("Monitoring " + q)
+
+	ticker := time.NewTicker(60 * time.Second)
+
+	for {
+		select {
+			case <-ticker.C:
+				res := fetchPriceFromGoogle(q)
+				log.Println(strings.ToUpper(q) + ": " + res)
+			// case <-exit:
+			// 	log.Println("Received exit notification. Stop monitoring " + q + " and return")
+			// 	break
+		}
+	}
+	wg.Done()
+}
+
+func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
+	log.Println("Starting Web Crawler")
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, q := range queries {
+			wg.Add(1)
+
+			go crawler.scrapStockPrice(wg, q)
+		}
+	}()
 }
 
 func main() {
@@ -116,6 +134,7 @@ func main() {
 		} else {
 			crawler.start(&wg, c.StringSlice("name")...)
 		}
+		// crawler.monitor(&wg, "reliance")
 	
 		wg.Wait()
 		return nil
