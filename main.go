@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -24,6 +26,7 @@ var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kes
 
 // Our crawler structure definition
 type Crawler struct {
+	ctx *cli.Context
 }
 
 func fetchPriceFromGoogle(q string, res chan<- string) {
@@ -59,7 +62,13 @@ func fetchPriceFromGoogle(q string, res chan<- string) {
 	}
 
 	re := regexp.MustCompile("\\n")
-	res <- re.ReplaceAllString(strings.ToUpper(q) + ": " + result, " ")
+	res <- re.ReplaceAllString(strings.Title(q) + ": " + result, " ")
+}
+
+func (crawler *Crawler) logCmd(queries ...string) {
+	for _, q := range queries {
+		log.Printf("%s %s\n", strings.Title(crawler.ctx.Command.FullName()), strings.Title(q))
+	}
 }
 
 func (crawler *Crawler) spawnScrapers(res chan<- string, queries ...string) {
@@ -70,6 +79,8 @@ func (crawler *Crawler) spawnScrapers(res chan<- string, queries ...string) {
 }
 
 func (crawler *Crawler) scrapStockPrices(done chan<- bool, queries ...string) {
+
+	crawler.logCmd(queries...)
 
 	res := make(chan string)
 	crawler.spawnScrapers(res, queries...)
@@ -84,8 +95,9 @@ func (crawler *Crawler) scrapStockPrices(done chan<- bool, queries ...string) {
 	done <- true
 }
 
-func (crawler *Crawler) monitor(done chan<- bool, queries ...string) {
+func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal, queries ...string) {
 
+	crawler.logCmd(queries...)
 	ticker := time.NewTicker(60 * time.Second)
 	for {
 		select {
@@ -100,11 +112,12 @@ func (crawler *Crawler) monitor(done chan<- bool, queries ...string) {
 							}
 					}
 				}
-			// case <-exit:
-			// 	log.Println("Received exit notification. Stop monitoring " + q + " and return")
-				// done <- true
-				// return
+			case <-exit:
+				log.Println("Received exit request, return.")
+				done <- true
+				return
 		}
+		log.Println()
 	}
 }
 
@@ -116,40 +129,71 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "stockscraper"
 	app.Usage = "Scrap stock prices from Google."
-	app.Flags = []cli.Flag{
-		&cli.StringSliceFlag{
-			Name: "name",
-			Aliases: []string{"n"},
-			Value: cli.NewStringSlice("reliance"),
-			Usage: "Name of stock(s).",
-		},
-		&cli.BoolFlag{
-			Name: "std",
-			Value: false,
-			Usage: "Use Personal Stock List for scraping Google.",
-		},
-	}
-	app.Action = func(c *cli.Context) error {
-		// create a new instance of the crawler structure
-		crawler := &Crawler{
+	flags := []cli.Flag{
+			&cli.StringSliceFlag{
+				Name: "name",
+				Aliases: []string{"n"},
+				Value: cli.NewStringSlice("reliance"),
+				Usage: "Name of stock(s).",
+			},
+			&cli.BoolFlag{
+				Name: "std",
+				Value: false,
+				Usage: "Use Personal Stock List for scraping Google.",
+			},
 		}
+	app.Commands = []*cli.Command{
+		&cli.Command{
+			Name: "scrap",
+			Usage: "Scrap some stock(s)",
+			Action: func(c *cli.Context) error {
+					crawler := &Crawler{
+						ctx: c,
+					}
 
-		if c.Bool("std") {
-			go crawler.scrapStockPrices(done, personalList...)
-		} else {
-			go crawler.scrapStockPrices(done, c.StringSlice("name")...)
-		}
-		// go crawler.monitor("reliance", done)
-	
-		return nil
+					if c.Bool("std") {
+						go crawler.scrapStockPrices(done, personalList...)
+					} else {
+						go crawler.scrapStockPrices(done, c.StringSlice("name")...)
+					}
+
+					select {
+						case <-done: log.Println("Exiting")
+					}
+				
+					return nil
+				},
+			Flags: flags,
+		},
+		&cli.Command{
+			Name: "monitor",
+			Usage: "Monitor some stock(s)",
+			Action: func(c *cli.Context) error {
+
+					exit := make(chan os.Signal)
+					signal.Notify(exit, syscall.SIGINT)
+					crawler := &Crawler{
+						ctx: c,
+					}
+
+					if c.Bool("std") {
+						go crawler.monitor(done, exit, personalList...)
+					} else {
+						go crawler.monitor(done, exit, c.StringSlice("name")...)
+					}
+
+					select {
+						case <-done: log.Println("Exiting")
+					}
+				
+					return nil
+				},
+			Flags: flags,
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("Received error while trying to run stockscraper: %v", err)
-	}
-
-	select {
-		case <-done: log.Println("Exiting")
 	}
 
 	fmt.Println()
