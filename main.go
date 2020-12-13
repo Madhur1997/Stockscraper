@@ -117,7 +117,7 @@ func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal, queries
 				done <- true
 				return
 		}
-		log.Println()
+		fmt.Println()
 	}
 }
 
