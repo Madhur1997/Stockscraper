@@ -1,19 +1,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"regexp"
 	"runtime"
-	"strings"
 	"sync"
 	"syscall"
-	"time"
 
-	"github.com/chromedp/chromedp"
 	"github.com/urfave/cli/v2"
 )
 
@@ -23,104 +18,6 @@ const NCPU = 1
 var _ sync.WaitGroup
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
 	"vodafone idea", "TCS", "divis labs",}
-
-// Our crawler structure definition
-type Crawler struct {
-	ctx *cli.Context
-}
-
-func fetchPriceFromGoogle(q string, res chan<- string) {
-
-	url := "https://www.google.com"
-	inQ := q + " stock price"
-	inTextSel := `//input[@name='q']`
-	btnSel := `input[name="btnK"]`
-	outTextSel := `//span[@jsname="vWLAgc"]`
-
-	// create context
-	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
-	// Wait for timeout.
-	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
-
-	// run task list
-	var result string
-	err := chromedp.Run(
-		timeoutContext,
-		chromedp.Navigate(url),
-		chromedp.WaitVisible(inTextSel),
-		chromedp.SendKeys(inTextSel, inQ),
-		chromedp.Click(btnSel, chromedp.ByQuery),
-		chromedp.WaitVisible(outTextSel),
-		chromedp.Text(outTextSel, &result),
-	)
-
-	if err != nil {
-		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
-		chromedp.FromContext(ctx).Allocator.Wait()
-		res <- ""
-	}
-
-	re := regexp.MustCompile("\\n")
-	res <- re.ReplaceAllString(strings.Title(q) + ": " + result, " ")
-}
-
-func (crawler *Crawler) logCmd(queries ...string) {
-	for _, q := range queries {
-		log.Printf("%s %s\n", strings.Title(crawler.ctx.Command.FullName()), strings.Title(q))
-	}
-	fmt.Println()
-}
-
-func (crawler *Crawler) spawnScrapers(res chan<- string, queries ...string) {
-
-	for _, q := range queries {
-		go fetchPriceFromGoogle(q, res)
-	}
-}
-
-func (crawler *Crawler) scrapStockPrices(done chan<- bool, queries ...string) {
-
-	crawler.logCmd(queries...)
-
-	res := make(chan string)
-	crawler.spawnScrapers(res, queries...)
-	for i := 0; i < len(queries); i++ {
-		select {
-			case val := <-res:
-				if val != "" {
-					log.Println(val)
-				}
-		}
-	}
-	done <- true
-}
-
-func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal, queries ...string) {
-
-	crawler.logCmd(queries...)
-	ticker := time.NewTicker(60 * time.Second)
-	for {
-		select {
-			case <-ticker.C:
-				res := make(chan string)
-				crawler.spawnScrapers(res, queries...)
-				for i := 0; i <len(queries); i++ {
-					select {
-						case val := <-res:
-							if val != "" {
-								log.Println(val)
-							}
-					}
-				}
-			case <-exit:
-				log.Println("Received exit request, return.")
-				done <- true
-				return
-		}
-		fmt.Println()
-	}
-}
 
 func main() {
 	// set how many processes (threads to use)
