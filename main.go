@@ -18,6 +18,7 @@ import (
 // how many threads to use within the application
 const NCPU = 1
 
+var _ sync.WaitGroup
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
 	"vodafone idea", "TCS", "divis labs",}
 
@@ -25,7 +26,7 @@ var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kes
 type Crawler struct {
 }
 
-func fetchPriceFromGoogle(q string) (string) {
+func fetchPriceFromGoogle(q string, res chan<- string) {
 
 	url := "https://www.google.com"
 	inQ := q + " stock price"
@@ -40,7 +41,7 @@ func fetchPriceFromGoogle(q string) (string) {
 	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
 
 	// run task list
-	var res string
+	var result string
 	err := chromedp.Run(
 		timeoutContext,
 		chromedp.Navigate(url),
@@ -48,65 +49,70 @@ func fetchPriceFromGoogle(q string) (string) {
 		chromedp.SendKeys(inTextSel, inQ),
 		chromedp.Click(btnSel, chromedp.ByQuery),
 		chromedp.WaitVisible(outTextSel),
-		chromedp.Text(outTextSel, &res),
+		chromedp.Text(outTextSel, &result),
 	)
 
 	if err != nil {
 		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
 		chromedp.FromContext(ctx).Allocator.Wait()
-		return ""
+		res <- ""
 	}
 
 	re := regexp.MustCompile("\\n")
-	return re.ReplaceAllString(res, " ")
+	res <- re.ReplaceAllString(strings.ToUpper(q) + ": " + result, " ")
 }
 
-func (crawler *Crawler) scrapStockPrice(wg *sync.WaitGroup, q string) {
-	log.Printf("Scrapping stock price for: %s\n", strings.Title(q))
+func (crawler *Crawler) spawnScrapers(res chan<- string, queries ...string) {
 
-	defer wg.Done()
-	res := fetchPriceFromGoogle(q)
-	if res != "" {
-		log.Println(strings.ToUpper(q) + ": " + res)
+	for _, q := range queries {
+		go fetchPriceFromGoogle(q, res)
 	}
 }
 
-func (crawler *Crawler) monitor(wg *sync.WaitGroup, q string) {
-	log.Println("Monitoring " + q)
+func (crawler *Crawler) scrapStockPrices(done chan<- bool, queries ...string) {
+
+	res := make(chan string)
+	crawler.spawnScrapers(res, queries...)
+	for i := 0; i < len(queries); i++ {
+		select {
+			case val := <-res:
+				if val != "" {
+					log.Println(val)
+				}
+		}
+	}
+	done <- true
+}
+
+func (crawler *Crawler) monitor(done chan<- bool, queries ...string) {
 
 	ticker := time.NewTicker(60 * time.Second)
-
 	for {
 		select {
 			case <-ticker.C:
-				res := fetchPriceFromGoogle(q)
-				log.Println(strings.ToUpper(q) + ": " + res)
+				res := make(chan string)
+				crawler.spawnScrapers(res, queries...)
+				for i := 0; i <len(queries); i++ {
+					select {
+						case val := <-res:
+							if val != "" {
+								log.Println(val)
+							}
+					}
+				}
 			// case <-exit:
 			// 	log.Println("Received exit notification. Stop monitoring " + q + " and return")
-			// 	break
+				// done <- true
+				// return
 		}
 	}
-	wg.Done()
-}
-
-func (crawler *Crawler) start(wg *sync.WaitGroup, queries ...string) {
-	log.Println("Starting Web Crawler")
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, q := range queries {
-			wg.Add(1)
-
-			go crawler.scrapStockPrice(wg, q)
-		}
-	}()
 }
 
 func main() {
 	// set how many processes (threads to use)
 	runtime.GOMAXPROCS(NCPU)
 
+	done := make(chan bool)
 	app := cli.NewApp()
 	app.Name = "stockscraper"
 	app.Usage = "Scrap stock prices from Google."
@@ -124,24 +130,26 @@ func main() {
 		},
 	}
 	app.Action = func(c *cli.Context) error {
-		var wg sync.WaitGroup
 		// create a new instance of the crawler structure
 		crawler := &Crawler{
 		}
 
 		if c.Bool("std") {
-			crawler.start(&wg, personalList...)
+			go crawler.scrapStockPrices(done, personalList...)
 		} else {
-			crawler.start(&wg, c.StringSlice("name")...)
+			go crawler.scrapStockPrices(done, c.StringSlice("name")...)
 		}
-		// crawler.monitor(&wg, "reliance")
+		// go crawler.monitor("reliance", done)
 	
-		wg.Wait()
 		return nil
 	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatalf("Received error while trying to run stockscraper: %v", err)
+	}
+
+	select {
+		case <-done: log.Println("Exiting")
 	}
 
 	fmt.Println()
