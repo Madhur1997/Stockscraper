@@ -69,6 +69,7 @@ func (crawler *Crawler) logCmd(queries ...string) {
 	for _, q := range queries {
 		log.Printf("%s %s\n", strings.Title(crawler.ctx.Command.FullName()), strings.Title(q))
 	}
+	fmt.Println()
 }
 
 func (crawler *Crawler) spawnScrapers(res chan<- string, queries ...string) {
