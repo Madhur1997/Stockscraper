@@ -12,7 +12,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// how many threads to use within the application
+// How many threads to use within the application
 const NCPU = 1
 
 var _ sync.WaitGroup
@@ -27,7 +27,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "stockscraper"
 	app.Usage = "Scrap stock prices from Google."
-	flags := []cli.Flag{
+	cmnFlags := []cli.Flag{
 			&cli.StringSliceFlag{
 				Name: "name",
 				Aliases: []string{"n"},
@@ -45,48 +45,45 @@ func main() {
 			Name: "scrap",
 			Usage: "Scrap some stock(s)",
 			Action: func(c *cli.Context) error {
-					crawler := &Crawler{
-						ctx: c,
-					}
-
+					var crawler *Crawler
 					if c.Bool("std") {
-						go crawler.scrapStockPrices(done, personalList...)
+						crawler = NewCrawler(c, personalList...)
 					} else {
-						go crawler.scrapStockPrices(done, c.StringSlice("name")...)
+						crawler = NewCrawler(c, c.StringSlice("name")...)
 					}
 
+					go crawler.scrapStockPrices(done)
 					select {
 						case <-done: log.Println("Exiting")
 					}
 				
 					return nil
 				},
-			Flags: flags,
+			Flags: cmnFlags,
 		},
 		&cli.Command{
 			Name: "monitor",
 			Usage: "Monitor some stock(s)",
 			Action: func(c *cli.Context) error {
 
+					var crawler *Crawler
 					exit := make(chan os.Signal)
 					signal.Notify(exit, syscall.SIGINT)
-					crawler := &Crawler{
-						ctx: c,
-					}
 
 					if c.Bool("std") {
-						go crawler.monitor(done, exit, personalList...)
+						crawler = NewCrawler(c, personalList...)
 					} else {
-						go crawler.monitor(done, exit, c.StringSlice("name")...)
+						crawler = NewCrawler(c, c.StringSlice("name")...)
 					}
 
+					go crawler.monitor(done, exit)
 					select {
 						case <-done: log.Println("Exiting")
 					}
 				
 					return nil
 				},
-			Flags: flags,
+			Flags: cmnFlags,
 		},
 	}
 
