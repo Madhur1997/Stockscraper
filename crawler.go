@@ -134,8 +134,12 @@ func (crawler *Crawler) analyze(val string) {
 		}
 	}
 
-	if incCt >= crawler.alertThreshold || decCt >= crawler.alertThreshold {
-		log.Printf("%s has made consistent one direction movements in last %d captures", stock, crawler.alertThreshold)
+	if incCt >= crawler.alertThreshold {
+		log.Printf("%s has made consistent upward movements in last %d captures", stock, crawler.alertThreshold)
+	}
+
+	if decCt >= crawler.alertThreshold {
+		log.Printf("%s has made consistent downward movements in last %d captures", stock, crawler.alertThreshold)
 	}
 }
 
