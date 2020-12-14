@@ -17,7 +17,7 @@ const NCPU = 1
 
 var _ sync.WaitGroup
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
-	"vodafone idea", "TCS", "divis labs",}
+	"vodafone idea", "divis labs",}
 
 func main() {
 	// set how many processes (threads to use)
@@ -40,6 +40,13 @@ func main() {
 				Usage: "Use Personal Stock List for scraping Google.",
 			},
 		}
+	thresholdFlag := &cli.IntFlag{
+				Name: "threshold",
+				Aliases: []string{"t"},
+				Value: 5,
+				Usage: "Alert trigger threshold.",
+			}
+
 	app.Commands = []*cli.Command{
 		&cli.Command{
 			Name: "scrap",
@@ -83,7 +90,7 @@ func main() {
 				
 					return nil
 				},
-			Flags: cmnFlags,
+			Flags: append(cmnFlags, thresholdFlag),
 		},
 	}
 
