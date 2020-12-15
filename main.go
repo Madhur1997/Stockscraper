@@ -13,11 +13,8 @@ import (
 )
 
 // How many threads to use within the application
-const NCPU = 1
-
+const NCPU = 8
 var _ sync.WaitGroup
-var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
-	"vodafone idea", "divis labs",}
 
 func main() {
 	// set how many processes (threads to use)
