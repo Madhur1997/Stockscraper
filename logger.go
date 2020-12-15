@@ -1,9 +1,17 @@
 package main
 
 import (
-	log "github.com/sirupsen/logrus"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v2"
 )
+
+func setLogLevel(c *cli.Context) {
+	if c.Bool("d") {
+		log.SetLevel(log.DebugLevel)
+	}
+}
 
 func (crawler *Crawler) ppCmd() {
 	for s, _ := range crawler.stocks {

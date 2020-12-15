@@ -19,12 +19,6 @@ var _ sync.WaitGroup
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
 	"vodafone idea", "divis labs",}
 
-func setLogLevel(c *cli.Context) {
-	if c.Bool("d") {
-		log.SetLevel(log.DebugLevel)
-	}
-}
-
 func main() {
 	// set how many processes (threads to use)
 	runtime.GOMAXPROCS(NCPU)
@@ -34,43 +28,19 @@ func main() {
 	app.Name = "stockscraper"
 	app.Usage = "Scrap stock prices from Google."
 	app.Flags = []cli.Flag{
-			&cli.BoolFlag{
-				Name: "debug",
-				Value: false,
-				Aliases: []string{"d"},
-				Usage: "Print debug log(s)",
-			},
+			
 		}
 	app.Action = func(c *cli.Context) error {
 			setLogLevel(c)
-			log.Println(1)
 			return nil
 		}
-	cmnFlags := []cli.Flag{
-			&cli.StringSliceFlag{
-				Name: "name",
-				Aliases: []string{"n"},
-				Value: cli.NewStringSlice("reliance"),
-				Usage: "Name of stock(s).",
-			},
-			&cli.BoolFlag{
-				Name: "std",
-				Value: false,
-				Usage: "Use Personal Stock List for scraping Google.",
-			},
-		}
-	thresholdFlag := &cli.IntFlag{
-				Name: "threshold",
-				Aliases: []string{"t"},
-				Value: 5,
-				Usage: "Alert trigger threshold.",
-			}
 
 	app.Commands = []*cli.Command{
 		&cli.Command{
 			Name: "scrap",
 			Usage: "Scrap some stock(s)",
 			Action: func(c *cli.Context) error {
+					setLogLevel(c)
 					var crawler *Crawler
 					if c.Bool("std") {
 						crawler = NewCrawler(c, personalList...)
@@ -85,14 +55,14 @@ func main() {
 				
 					return nil
 				},
-			Flags: cmnFlags,
+			Flags: append(cmdFlags, debugFlag),
 		},
 		&cli.Command{
 			Name: "monitor",
 			Usage: "Monitor some stock(s)",
 			Action: func(c *cli.Context) error {
-
 					var crawler *Crawler
+					setLogLevel(c)
 					exit := make(chan os.Signal)
 					signal.Notify(exit, syscall.SIGINT)
 
@@ -109,7 +79,7 @@ func main() {
 				
 					return nil
 				},
-			Flags: append(cmnFlags, thresholdFlag),
+			Flags: append(cmdFlags, thresholdFlag, debugFlag),
 		},
 	}
 

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"math"
 	"os"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/chromedp/chromedp"
 	"github.com/faiface/beep"
 	"github.com/urfave/cli/v2"
@@ -131,14 +131,14 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 	incCt := 0
 	decCt := 0
 	for idx := len(crawler.stocks[stock])-1; idx > 0; idx-- {
-		if crawler.stocks[stock][idx-1] > crawler.stocks[stock][idx] {
+		if crawler.stocks[stock][idx-1] >= crawler.stocks[stock][idx] {
 			break;
 		}
 		incCt++;
 	}
 
 	for idx := len(crawler.stocks[stock])-2; idx >= 0; idx-- {
-		if crawler.stocks[stock][idx] < crawler.stocks[stock][idx + 1] {
+		if crawler.stocks[stock][idx] <= crawler.stocks[stock][idx + 1] {
 			break
 		}
 		decCt++;
