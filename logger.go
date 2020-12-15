@@ -1,14 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"strings"
 )
 
 func (crawler *Crawler) ppCmd() {
 	for s, _ := range crawler.stocks {
-		log.Printf("%s %s\n", strings.Title(crawler.ctx.Command.FullName()), strings.Title(s))
+		log.WithFields(log.Fields{
+			"Command": strings.Title(crawler.ctx.Command.FullName()),
+			"Stock": strings.ReplaceAll(strings.Title(s), "\"", ""),
+		}).Info()
 	}
-	fmt.Println()
 }

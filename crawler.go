@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -12,8 +13,11 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/faiface/beep"
 	"github.com/urfave/cli/v2"
 )
+
+var _ beep.Buffer
 
 // Our crawler structure definition
 type Crawler struct {
@@ -28,7 +32,7 @@ func NewCrawler(c *cli.Context, stocks ...string) *Crawler {
 	crawler := &Crawler{ctx: c,}
 	crawler.stocks = make(map[string][]float64)
 	for _, s := range stocks {
-		crawler.stocks[s] = make([]float64, 10000)
+		crawler.stocks[strings.Title(s)] = make([]float64, 0)
 	}
 	
 	threshold := c.Int("threshold")
@@ -66,9 +70,13 @@ func fetchPriceFromGoogle(q string, res chan<- string) {
 	)
 
 	if err != nil {
-		log.Printf("Error while scrapping stock price for %s: %v", strings.Title(q), err)
+		log.WithFields(log.Fields{
+			"Stock": strings.Title(q),
+			"Error": err,
+		}).Error("Error scrapping stock price")
 		chromedp.FromContext(ctx).Allocator.Wait()
 		res <- ""
+		return
 	}
 
 	re := regexp.MustCompile("\\n")
@@ -97,14 +105,14 @@ func (crawler *Crawler) scrapStockPrices(done chan<- bool) {
 		select {
 			case val := <-res:
 				if val != "" {
-					log.Println(val)
+					log.Info(val)
 				}
 		}
 	}
 	done <- true
 }
 
-func (crawler *Crawler) analyze(val string) {
+func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 
 	crawler.Lock()
 	defer crawler.Unlock()
@@ -115,7 +123,7 @@ func (crawler *Crawler) analyze(val string) {
 
 	stockPrice, err := strconv.ParseFloat(temp, 32)
 	if err != nil {
-		log.Fatalf("Error while converting string %s to float: %v", temp, err)
+		log.Fatalf("Error converting string %s to float: %v", temp, err)
 	}
 
 	crawler.stocks[stock] = append(crawler.stocks[stock], stockPrice)
@@ -123,24 +131,37 @@ func (crawler *Crawler) analyze(val string) {
 	incCt := 0
 	decCt := 0
 	for idx := len(crawler.stocks[stock])-1; idx > 0; idx-- {
-		if crawler.stocks[stock][idx] > crawler.stocks[stock][idx - 1] {
-			incCt++;
+		if crawler.stocks[stock][idx-1] > crawler.stocks[stock][idx] {
+			break;
 		}
+		incCt++;
 	}
 
 	for idx := len(crawler.stocks[stock])-2; idx >= 0; idx-- {
 		if crawler.stocks[stock][idx] < crawler.stocks[stock][idx + 1] {
-			decCt++;
+			break
 		}
+		decCt++;
 	}
+	log.WithFields(log.Fields{
+		"incCt": incCt,
+		"decCt": decCt,
+	}).Debug()
 
 	if incCt >= crawler.alertThreshold {
-		log.Printf("%s has made consistent upward movements in last %d captures", stock, crawler.alertThreshold)
+		log.WithFields(log.Fields{
+			"Stock": stock,
+			"Interval": math.Max(float64(incCt), float64(crawler.alertThreshold)),
+		}).Warn("Consistent upward movements\n")
 	}
 
 	if decCt >= crawler.alertThreshold {
-		log.Printf("%s has made consistent downward movements in last %d captures", stock, crawler.alertThreshold)
+		log.WithFields(log.Fields{
+			"Stock": stock,
+			"Interval": math.Max(float64(incCt), float64(crawler.alertThreshold)),
+		}).Warn("Consistent downward movements\n")
 	}
+	wg.Done()
 }
 
 func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {
@@ -155,17 +176,20 @@ func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {
 				crawler.Lock()
 				length := len(crawler.stocks)
 				crawler.Unlock()
+				var wg sync.WaitGroup
 				for i := 0; i <length; i++ {
 					select {
 						case val := <-res:
 							if val != "" {
-								log.Println(val)
-								go crawler.analyze(val)
+								log.Info(val)
+								wg.Add(1)
+								go crawler.analyze(val, &wg)
 							}
 					}
 				}
+				wg.Wait()
 			case <-exit:
-				log.Println("Received exit request, return.")
+				log.Info("Exit request, return.")
 				done <- true
 				return
 		}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"runtime"
@@ -19,6 +19,12 @@ var _ sync.WaitGroup
 var personalList []string = []string{"reliance", "ashok leyland", "indigo", "kesoram", "hdfc bank", "adani green energy",
 	"vodafone idea", "divis labs",}
 
+func setLogLevel(c *cli.Context) {
+	if c.Bool("d") {
+		log.SetLevel(log.DebugLevel)
+	}
+}
+
 func main() {
 	// set how many processes (threads to use)
 	runtime.GOMAXPROCS(NCPU)
@@ -27,6 +33,19 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "stockscraper"
 	app.Usage = "Scrap stock prices from Google."
+	app.Flags = []cli.Flag{
+			&cli.BoolFlag{
+				Name: "debug",
+				Value: false,
+				Aliases: []string{"d"},
+				Usage: "Print debug log(s)",
+			},
+		}
+	app.Action = func(c *cli.Context) error {
+			setLogLevel(c)
+			log.Println(1)
+			return nil
+		}
 	cmnFlags := []cli.Flag{
 			&cli.StringSliceFlag{
 				Name: "name",
@@ -61,7 +80,7 @@ func main() {
 
 					go crawler.scrapStockPrices(done)
 					select {
-						case <-done: log.Println("Exiting")
+						case <-done: log.Warn("Exiting")
 					}
 				
 					return nil
@@ -85,7 +104,7 @@ func main() {
 
 					go crawler.monitor(done, exit)
 					select {
-						case <-done: log.Println("Exiting")
+						case <-done: log.Warn("Exiting")
 					}
 				
 					return nil
