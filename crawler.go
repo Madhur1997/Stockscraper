@@ -44,6 +44,10 @@ func NewCrawler(c *cli.Context, stocks ...string) *Crawler {
 }
 
 func fetchPriceFromGoogle(q string, res chan<- string) {
+	
+	log.WithFields(log.Fields{
+		"Stock": q,
+	}).Debug("Fetch stock price")
 
 	url := "https://www.google.com"
 	inQ := q + " stock price"
@@ -74,7 +78,6 @@ func fetchPriceFromGoogle(q string, res chan<- string) {
 			"Stock": strings.Title(q),
 			"Error": err,
 		}).Error("Error scrapping stock price")
-		chromedp.FromContext(ctx).Allocator.Wait()
 		res <- ""
 		return
 	}
@@ -113,9 +116,13 @@ func (crawler *Crawler) scrapStockPrices(done chan<- bool) {
 }
 
 func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
+	log.WithFields(log.Fields{
+		"Stock": val,
+	}).Debug("Analyze stock")
 
 	crawler.Lock()
 	defer crawler.Unlock()
+	defer wg.Done()
 
 	valSlice := strings.Split(val, ":")
 	stock := valSlice[0]
@@ -144,6 +151,7 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 		decCt++;
 	}
 	log.WithFields(log.Fields{
+		"Stock": stock,
 		"incCt": incCt,
 		"decCt": decCt,
 	}).Debug()
@@ -161,7 +169,6 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 			"Interval": math.Max(float64(incCt), float64(crawler.alertThreshold)),
 		}).Warn("Consistent downward movements\n")
 	}
-	wg.Done()
 }
 
 func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {

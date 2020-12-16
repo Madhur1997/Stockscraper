@@ -28,7 +28,7 @@ func main() {
 			
 		}
 	app.Action = func(c *cli.Context) error {
-			setLogLevel(c)
+			setLogger(c)
 			return nil
 		}
 
@@ -37,7 +37,7 @@ func main() {
 			Name: "scrap",
 			Usage: "Scrap some stock(s)",
 			Action: func(c *cli.Context) error {
-					setLogLevel(c)
+					setLogger(c)
 					var crawler *Crawler
 					if c.Bool("std") {
 						crawler = NewCrawler(c, personalList...)
@@ -59,7 +59,7 @@ func main() {
 			Usage: "Monitor some stock(s)",
 			Action: func(c *cli.Context) error {
 					var crawler *Crawler
-					setLogLevel(c)
+					setLogger(c)
 					exit := make(chan os.Signal)
 					signal.Notify(exit, syscall.SIGINT)
 

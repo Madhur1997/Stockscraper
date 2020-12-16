@@ -7,7 +7,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func setLogLevel(c *cli.Context) {
+func setLogger(c *cli.Context) {
+	customFormatter := new(log.TextFormatter)
+        customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
 	if c.Bool("d") {
 		log.SetLevel(log.DebugLevel)
 	}
