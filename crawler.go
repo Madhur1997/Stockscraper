@@ -166,7 +166,7 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 	if decCt >= crawler.alertThreshold {
 		log.WithFields(log.Fields{
 			"Stock": stock,
-			"Interval": math.Max(float64(incCt), float64(crawler.alertThreshold)),
+			"Interval": math.Max(float64(decCt), float64(crawler.alertThreshold)),
 		}).Warn("Consistent downward movements\n")
 	}
 }
