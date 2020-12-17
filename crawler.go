@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,7 +60,7 @@ func fetchPriceFromGoogle(q string, res chan<- string) {
 	ctx, cancel := chromedp.NewContext(context.Background())
 	defer cancel()
 	// Wait for timeout.
-	timeoutContext, _ := context.WithTimeout(ctx, 30 * time.Second)
+	timeoutContext, _ := context.WithTimeout(ctx, 20 * time.Second)
 
 	// run task list
 	var result string
@@ -104,13 +105,18 @@ func (crawler *Crawler) scrapStockPrices(done chan<- bool) {
 
 	crawler.Lock()
 	defer crawler.Unlock()
+	stkColl := make([]string, 0)
 	for i := 0; i < len(crawler.stocks); i++ {
 		select {
 			case val := <-res:
 				if val != "" {
-					log.Info(val)
+					stkColl = append(stkColl, val)
 				}
 		}
+	}
+	sort.Strings(stkColl)
+	for _, val := range stkColl {
+		log.Info(val)
 	}
 	done <- true
 }
@@ -183,16 +189,22 @@ func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {
 				crawler.Lock()
 				length := len(crawler.stocks)
 				crawler.Unlock()
-				var wg sync.WaitGroup
+				stkColl := make([]string, 0)
 				for i := 0; i <length; i++ {
 					select {
 						case val := <-res:
 							if val != "" {
-								log.Info(val)
-								wg.Add(1)
-								go crawler.analyze(val, &wg)
+								stkColl = append(stkColl, val)
 							}
 					}
+				}
+
+				sort.Strings(stkColl)
+				var wg sync.WaitGroup
+				for _, val := range stkColl {
+					log.Info(val)
+					wg.Add(1)
+					go crawler.analyze(val, &wg)
 				}
 				wg.Wait()
 			case <-exit:
