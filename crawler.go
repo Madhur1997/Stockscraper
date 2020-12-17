@@ -143,14 +143,15 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 
 	incCt := 0
 	decCt := 0
-	for idx := len(crawler.stocks[stock])-1; idx > 0; idx-- {
+	length := len(crawler.stocks[stock])
+	for idx := length-1; idx > 0; idx-- {
 		if crawler.stocks[stock][idx-1] >= crawler.stocks[stock][idx] {
 			break;
 		}
 		incCt++;
 	}
 
-	for idx := len(crawler.stocks[stock])-2; idx >= 0; idx-- {
+	for idx := length-2; idx >= 0; idx-- {
 		if crawler.stocks[stock][idx] <= crawler.stocks[stock][idx + 1] {
 			break
 		}
@@ -162,17 +163,21 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 		"decCt": decCt,
 	}).Debug()
 
+	incMaxInt := int(math.Max(float64(incCt), float64(crawler.alertThreshold)))
+	decMaxInt := int(math.Max(float64(decCt), float64(crawler.alertThreshold)))
 	if incCt >= crawler.alertThreshold {
 		log.WithFields(log.Fields{
 			"Stock": stock,
-			"Interval": math.Max(float64(incCt), float64(crawler.alertThreshold)),
+			"Interval": incMaxInt,
+			"Prices": crawler.stocks[stock][length-incMaxInt:],
 		}).Warn("Consistent upward movements\n")
 	}
 
 	if decCt >= crawler.alertThreshold {
 		log.WithFields(log.Fields{
 			"Stock": stock,
-			"Interval": math.Max(float64(decCt), float64(crawler.alertThreshold)),
+			"Interval": decMaxInt,
+			"Prices": crawler.stocks[stock][length-decMaxInt:],
 		}).Warn("Consistent downward movements\n")
 	}
 }
