@@ -26,7 +26,17 @@ type Crawler struct {
 	alertThreshold int
 	stocks map[string][]float64
 	
-	sync.Mutex
+	m sync.Mutex
+}
+
+func(crawler *Crawler) lock() {
+	log.Debug("Aqcuire lock")
+	crawler.m.Lock()
+}
+
+func(crawler *Crawler) unlock() {
+	log.Debug("Release lock")
+	crawler.m.Unlock()
 }
 
 func NewCrawler(c *cli.Context, stocks ...string) *Crawler {
@@ -88,8 +98,8 @@ func fetchPriceFromGoogle(q string, res chan<- string) {
 }
 
 func (crawler *Crawler) spawnScrapers(res chan<- string) {
-	crawler.Lock()
-	defer crawler.Unlock()
+	crawler.lock()
+	defer crawler.unlock()
 
 	for s, _ := range crawler.stocks {
 		go fetchPriceFromGoogle(s, res)
@@ -103,8 +113,8 @@ func (crawler *Crawler) scrapStockPrices(done chan<- bool) {
 	res := make(chan string)
 	crawler.spawnScrapers(res)
 
-	crawler.Lock()
-	defer crawler.Unlock()
+	crawler.lock()
+	defer crawler.unlock()
 	stkColl := make([]string, 0)
 	for i := 0; i < len(crawler.stocks); i++ {
 		select {
@@ -126,8 +136,8 @@ func (crawler *Crawler) analyze(val string, wg *sync.WaitGroup) {
 		"Stock": val,
 	}).Debug("Analyze stock")
 
-	crawler.Lock()
-	defer crawler.Unlock()
+	crawler.lock()
+	defer crawler.unlock()
 	defer wg.Done()
 
 	valSlice := strings.Split(val, ":")
@@ -186,14 +196,23 @@ func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {
 
 	crawler.ppCmd()
 	ticker := time.NewTicker(60 * time.Second)
+	go func() {
+		select {
+			case <-exit:
+				log.Info("Exit request, return.")
+				done <- true
+				return
+			}
+	} ()
+			
 	for {
 		select {
 			case <-ticker.C:
 				res := make(chan string)
 				crawler.spawnScrapers(res)
-				crawler.Lock()
+				crawler.lock()
 				length := len(crawler.stocks)
-				crawler.Unlock()
+				crawler.unlock()
 				stkColl := make([]string, 0)
 				for i := 0; i <length; i++ {
 					select {
@@ -212,10 +231,6 @@ func (crawler *Crawler) monitor(done chan<- bool, exit <-chan os.Signal) {
 					go crawler.analyze(val, &wg)
 				}
 				wg.Wait()
-			case <-exit:
-				log.Info("Exit request, return.")
-				done <- true
-				return
 		}
 		fmt.Println()
 	}
